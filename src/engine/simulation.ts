@@ -59,6 +59,7 @@ export function spawnCivilizations(cells: Cell[], count: number): { updatedCells
         food: GAME_CONFIG.STARTING_FOOD,
         wood: GAME_CONFIG.STARTING_WOOD,
         ore: GAME_CONFIG.STARTING_ORE,
+        birthTick: 1,
       };
       
       civs.push(newCiv);
@@ -147,6 +148,7 @@ export function simulateTick(cells: Cell[], civs: Civilization[], currentTick: n
           food: stolenFood,
           wood: stolenWood,
           ore: stolenOre,
+          birthTick: currentTick,
         };
 
         civ.lastRevoltTick = currentTick;

@@ -6,6 +6,7 @@ export default function LeaderboardModal() {
   const setLeaderboardOpen = useGameStore(state => state.setLeaderboardOpen);
   const civs = useGameStore(state => state.civs);
   const cells = useGameStore(state => state.cells);
+  const year = useGameStore(state => state.year);
 
   if (!isLeaderboardOpen) return null;
 
@@ -38,6 +39,7 @@ export default function LeaderboardModal() {
                 <th className="py-4 px-4 font-semibold">Civilisation</th>
                 <th className="py-4 px-4 font-semibold">Population</th>
                 <th className="py-4 px-4 font-semibold">Territoires</th>
+                <th className="py-4 px-4 font-semibold">Âge</th>
                 <th className="py-4 px-4 font-semibold">Score</th>
               </tr>
             </thead>
@@ -53,13 +55,14 @@ export default function LeaderboardModal() {
                     </td>
                     <td className="py-4 px-4">{civ.population.toLocaleString()}</td>
                     <td className="py-4 px-4">{ownedCellsCount}</td>
+                    <td className="py-4 px-4 text-slate-300">{Math.max(0, year - civ.birthTick)} ans</td>
                     <td className="py-4 px-4 font-bold text-amber-400">{getScore(civ).toLocaleString()}</td>
                   </tr>
                 );
               })}
               {sortedCivs.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">Aucune civilisation active.</td>
+                  <td colSpan={6} className="py-8 text-center text-slate-500">Aucune civilisation active.</td>
                 </tr>
               )}
             </tbody>

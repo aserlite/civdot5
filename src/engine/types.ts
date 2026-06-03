@@ -8,6 +8,7 @@ export interface Civilization {
   food: number;
   wood: number;
   ore: number;
+  birthTick: number;
   lastRevoltTick?: number;
 }
 
