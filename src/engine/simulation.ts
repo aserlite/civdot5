@@ -124,6 +124,17 @@ export function simulateTick(cells: Cell[], civs: Civilization[], currentTick: n
       }
       
       if (ownedCells.length > GAME_CONFIG.MIN_CELLS_FOR_REBELLION && (currentTick - (civ.lastRevoltTick || 0) > GAME_CONFIG.REBELLION_COOLDOWN) && Math.random() < GAME_CONFIG.REBELLION_CHANCE) {
+        const rebelShare = 0.25;
+        const stolenPop = Math.floor(newPop * rebelShare);
+        const stolenWood = Math.floor(newWood * rebelShare);
+        const stolenFood = Math.floor(newFood * rebelShare);
+        const stolenOre = Math.floor(newOre * rebelShare);
+
+        newPop -= stolenPop;
+        newWood -= stolenWood;
+        newFood -= stolenFood;
+        newOre -= stolenOre;
+
         const civId = `civ_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
         const colorData = generateCivColor(updatedCivs.map(c => c.hue));
         const newCiv: Civilization = {
@@ -132,24 +143,41 @@ export function simulateTick(cells: Cell[], civs: Civilization[], currentTick: n
           color: colorData.color,
           hue: colorData.hue,
           capitalCellId: c.id,
-          population: GAME_CONFIG.REBEL_STARTING_RESOURCES.pop,
-          food: GAME_CONFIG.REBEL_STARTING_RESOURCES.food,
-          wood: GAME_CONFIG.REBEL_STARTING_RESOURCES.wood,
-          ore: GAME_CONFIG.REBEL_STARTING_RESOURCES.ore,
+          population: Math.max(1, stolenPop),
+          food: stolenFood,
+          wood: stolenWood,
+          ore: stolenOre,
         };
 
         civ.lastRevoltTick = currentTick;
 
-        const cellIndex = updatedCells.findIndex(cell => cell.id === c.id);
-        if (cellIndex !== -1) {
-          updatedCells[cellIndex] = {
-            ...updatedCells[cellIndex],
-            civId: newCiv.id
-          };
+        const rebelCellsCount = Math.floor(ownedCells.length * rebelShare);
+        
+        const cellsWithDist = ownedCells.map(cell => {
+          const dx = cell.x - c.x;
+          const dy = cell.y - c.y;
+          return { cell, dist: dx * dx + dy * dy };
+        });
+        
+        cellsWithDist.sort((a, b) => a.dist - b.dist);
+        
+        let assignedCount = 0;
+        for (const { cell } of cellsWithDist) {
+          if (assignedCount >= rebelCellsCount) break;
+          if (cell.id === civ.capitalCellId) continue;
+          
+          const cellIndex = updatedCells.findIndex(uc => uc.id === cell.id);
+          if (cellIndex !== -1) {
+            updatedCells[cellIndex] = {
+              ...updatedCells[cellIndex],
+              civId: newCiv.id
+            };
+            assignedCount++;
+          }
         }
 
         updatedCivs.push(newCiv);
-        events.push({ message: `Une rébellion a éclaté ! ${newCiv.name} se soulève.`, type: 'rebellion' });
+        events.push({ message: `Guerre Civile ! ${newCiv.name} se soulève contre ${civ.name}.`, type: 'rebellion' });
       }
     });
 
@@ -168,112 +196,163 @@ export function simulateTick(cells: Cell[], civs: Civilization[], currentTick: n
     newWood = Math.min(newWood, maxWood);
     newOre = Math.min(newOre, maxOre);
 
-    const peacefulCandidates: { id: number, score: number }[] = [];
-    const warCandidates: { id: number, score: number, civId: string }[] = [];
-    
-    ownedCells.forEach(c => {
-      c.neighbors.forEach(nId => {
-        const neighbor = updatedCells.find(nc => nc.id === nId);
-        if (neighbor && neighbor.biome !== 'OCEAN') {
-          const score = BIOME_SCORES[neighbor.biome] || 0;
-          if (!neighbor.civId) {
-            if (!peacefulCandidates.find(cand => cand.id === nId)) {
-              peacefulCandidates.push({ id: nId, score });
-            }
-          } else if (neighbor.civId !== civ.id) {
-            if (!warCandidates.find(cand => cand.id === nId)) {
-              warCandidates.push({ id: nId, score, civId: neighbor.civId });
-            }
-          }
-        }
-      });
-    });
+    const currentDensity = newPop / Math.max(1, ownedCells.length);
+    const sizeMultiplier = Math.min(2.0, 1 + (ownedCells.length * 0.01));
 
-    if (peacefulCandidates.length > 0) {
-      if (newPop > GAME_CONFIG.EXPANSION_COST.pop && newWood >= GAME_CONFIG.EXPANSION_COST.wood) {
-        peacefulCandidates.sort((a, b) => b.score - a.score);
-        const bestCandidateId = peacefulCandidates[0].id;
-        
-        newWood -= GAME_CONFIG.EXPANSION_COST.wood;
-        
-        const cellIndex = updatedCells.findIndex(c => c.id === bestCandidateId);
-        if (cellIndex !== -1) {
-          updatedCells[cellIndex] = {
-            ...updatedCells[cellIndex],
-            civId: civ.id
-          };
-        }
-      }
-    } else if (warCandidates.length > 0) {
-      if (newPop > GAME_CONFIG.WAR_COST.pop && newOre >= GAME_CONFIG.WAR_COST.ore) {
-        warCandidates.sort((a, b) => b.score - a.score);
-        const bestTarget = warCandidates[0];
-        
-        const defender = updatedCivs.find(c => c.id === bestTarget.civId);
-        if (defender) {
-          const attackPower = (newPop * 0.5) + (newOre * 2) + Math.random() * 50;
-          let defensePower = ((defender.population * 0.5) + (defender.ore * 2)) * GAME_CONFIG.DEFENSE_BONUS + Math.random() * 50;
-          
-          const targetCell = updatedCells.find(c => c.id === bestTarget.id);
-          if (targetCell && targetCell.biome === 'BEACH') {
-            defensePower *= GAME_CONFIG.BEACH_DEFENSE_MULTIPLIER;
-          }
-          
-          const defenderCapital = updatedCells.find(c => c.id === defender.capitalCellId);
-          if (defenderCapital && targetCell) {
-            const dx = defenderCapital.x - targetCell.x;
-            const dy = defenderCapital.y - targetCell.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (targetCell.id === defender.capitalCellId) {
-              defensePower *= 3;
-            } else if (dist < 150) {
-              defensePower *= 1.5;
-            }
-          }
-          
-          const defenderCellsCount = updatedCells.filter(c => c.civId === defender.id).length;
-          const localPop = Math.floor(defender.population / Math.max(1, defenderCellsCount));
-          
-          newOre -= GAME_CONFIG.WAR_COST.ore;
-          if (newOre < 0) newOre = 0;
-
-          if (attackPower > defensePower) {
-            defender.population = Math.max(1, defender.population - localPop);
-            newPop = Math.max(1, newPop - GAME_CONFIG.WAR_COST.pop + Math.floor(localPop * GAME_CONFIG.ASSIMILATION_RATE));
-            
-            newFood += 20;
-            newWood += 20;
-            defender.food = Math.max(0, defender.food - 20);
-            defender.wood = Math.max(0, defender.wood - 20);
-
-            const cellIndex = updatedCells.findIndex(c => c.id === bestTarget.id);
-            if (cellIndex !== -1) {
-              updatedCells[cellIndex] = {
-                ...updatedCells[cellIndex],
-                civId: civ.id
-              };
-            }
-            
-            if (targetCell && targetCell.id === defender.capitalCellId) {
-              updatedCivs = updatedCivs.filter(c => c.id !== defender.id);
-              events.push({ message: `La capitale de ${defender.name} est tombée ! L'empire s'effondre.`, type: 'death' });
-              
-              for (let i = 0; i < updatedCells.length; i++) {
-                if (updatedCells[i].civId === defender.id) {
-                  updatedCells[i] = {
-                    ...updatedCells[i],
-                    civId: null
-                  };
-                }
+    if (currentDensity >= GAME_CONFIG.MIN_POP_DENSITY_FOR_EXPANSION) {
+      const peacefulCandidates: { id: number, score: number }[] = [];
+      const warCandidates: { id: number, score: number, civId: string }[] = [];
+      
+      ownedCells.forEach(c => {
+        c.neighbors.forEach(nId => {
+          const neighbor = updatedCells.find(nc => nc.id === nId);
+          if (neighbor && neighbor.biome !== 'OCEAN') {
+            const score = BIOME_SCORES[neighbor.biome] || 0;
+            if (!neighbor.civId) {
+              if (!peacefulCandidates.find(cand => cand.id === nId)) {
+                peacefulCandidates.push({ id: nId, score });
+              }
+            } else if (neighbor.civId !== civ.id) {
+              if (!warCandidates.find(cand => cand.id === nId)) {
+                warCandidates.push({ id: nId, score, civId: neighbor.civId });
               }
             }
-          } else {
-            newPop = Math.max(1, newPop - GAME_CONFIG.WAR_COST.pop);
-            defender.population = Math.max(1, defender.population - Math.floor(localPop * 0.2));
           }
+        });
+      });
+
+      const currentExpPopCost = Math.floor(GAME_CONFIG.EXPANSION_COST.pop * sizeMultiplier);
+      const currentExpWoodCost = Math.floor(GAME_CONFIG.EXPANSION_COST.wood * sizeMultiplier);
+      const currentWarPopCost = Math.floor(GAME_CONFIG.WAR_COST.pop * sizeMultiplier);
+      const currentWarOreCost = Math.floor(GAME_CONFIG.WAR_COST.ore * sizeMultiplier);
+
+      const maxActions = Math.max(1, Math.floor(ownedCells.length / 10));
+
+      for (let i = 0; i < maxActions; i++) {
+        if (peacefulCandidates.length > 0 && newPop > currentExpPopCost && newWood >= currentExpWoodCost) {
+          peacefulCandidates.sort((a, b) => b.score - a.score);
+          const bestCandidateId = peacefulCandidates.shift()!.id;
+          
+          newWood -= currentExpWoodCost;
+          
+          const cellIndex = updatedCells.findIndex(c => c.id === bestCandidateId);
+          if (cellIndex !== -1) {
+            updatedCells[cellIndex] = {
+              ...updatedCells[cellIndex],
+              civId: civ.id
+            };
+          }
+        } else if (warCandidates.length > 0 && newPop > currentWarPopCost && newOre >= currentWarOreCost) {
+          warCandidates.sort((a, b) => b.score - a.score);
+          const bestTarget = warCandidates.shift()!;
+          
+          const defender = updatedCivs.find(c => c.id === bestTarget.civId);
+          if (defender) {
+            const attackPower = (newPop * 0.5) + (newOre * 2) + Math.random() * 50;
+            let defensePower = ((defender.population * 0.5) + (defender.ore * 2)) * GAME_CONFIG.DEFENSE_BONUS + Math.random() * 50;
+            
+            const targetCell = updatedCells.find(c => c.id === bestTarget.id);
+            if (targetCell && targetCell.biome === 'BEACH') {
+              defensePower *= GAME_CONFIG.BEACH_DEFENSE_MULTIPLIER;
+            }
+            
+            const defenderCapital = updatedCells.find(c => c.id === defender.capitalCellId);
+            if (defenderCapital && targetCell) {
+              const dx = defenderCapital.x - targetCell.x;
+              const dy = defenderCapital.y - targetCell.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              
+              if (targetCell.id === defender.capitalCellId) {
+                defensePower *= 3;
+              } else if (dist < 150) {
+                defensePower *= 1.5;
+              }
+            }
+            
+            const defenderCellsCount = updatedCells.filter(c => c.civId === defender.id).length;
+            const defenderDensity = defender.population / Math.max(1, defenderCellsCount);
+            const densityMultiplier = Math.min(1, defenderDensity / GAME_CONFIG.MIN_POP_DENSITY_FOR_EXPANSION);
+            defensePower *= densityMultiplier;
+            
+            const localPop = Math.floor(defender.population / Math.max(1, defenderCellsCount));
+            
+            newOre -= currentWarOreCost;
+            if (newOre < 0) newOre = 0;
+
+            if (attackPower > defensePower) {
+              defender.population = Math.max(1, defender.population - localPop);
+              newPop = Math.max(1, newPop - currentWarPopCost + Math.floor(localPop * GAME_CONFIG.ASSIMILATION_RATE));
+              
+              newFood += 20;
+              newWood += 20;
+              defender.food = Math.max(0, defender.food - 20);
+              defender.wood = Math.max(0, defender.wood - 20);
+
+              const cellIndex = updatedCells.findIndex(c => c.id === bestTarget.id);
+              if (cellIndex !== -1) {
+                updatedCells[cellIndex] = {
+                  ...updatedCells[cellIndex],
+                  civId: civ.id
+                };
+              }
+              
+              if (targetCell && targetCell.id === defender.capitalCellId) {
+                updatedCivs = updatedCivs.filter(c => c.id !== defender.id);
+                events.push({ message: `La capitale de ${defender.name} est tombée ! L'empire s'effondre.`, type: 'death' });
+                
+                for (let j = 0; j < updatedCells.length; j++) {
+                  if (updatedCells[j].civId === defender.id) {
+                    updatedCells[j] = {
+                      ...updatedCells[j],
+                      civId: null
+                    };
+                  }
+                }
+              }
+            } else {
+              newPop = Math.max(1, newPop - currentWarPopCost);
+              defender.population = Math.max(1, defender.population - Math.floor(localPop * 0.2));
+            }
+          }
+        } else {
+          break;
         }
       }
+    }
+
+    if (currentDensity < GAME_CONFIG.CRITICAL_POP_DENSITY && ownedCells.length > 1) {
+      const capitalCell = updatedCells.find(c => c.id === civ.capitalCellId);
+      if (capitalCell) {
+        let farthestCell = ownedCells[0];
+        let maxDist = -1;
+        for (const cell of ownedCells) {
+          if (cell.id === civ.capitalCellId) continue;
+          const dx = cell.x - capitalCell.x;
+          const dy = cell.y - capitalCell.y;
+          const dist = dx * dx + dy * dy;
+          if (dist > maxDist) {
+            maxDist = dist;
+            farthestCell = cell;
+          }
+        }
+        if (farthestCell) {
+          const cellIndex = updatedCells.findIndex(c => c.id === farthestCell.id);
+          if (cellIndex !== -1) updatedCells[cellIndex] = { ...updatedCells[cellIndex], civId: null };
+          events.push({ message: `L'empire de ${civ.name} se fragmente par manque de population.`, type: 'info' });
+        }
+      }
+    }
+
+    if (ownedCells.length > 0 && ownedCells.length <= 2 && currentDensity < GAME_CONFIG.CRITICAL_POP_DENSITY * 2) {
+      for (const cell of ownedCells) {
+        const cellIndex = updatedCells.findIndex(c => c.id === cell.id);
+        if (cellIndex !== -1) {
+          updatedCells[cellIndex] = { ...updatedCells[cellIndex], civId: null };
+        }
+      }
+      updatedCivs = updatedCivs.filter(c => c.id !== civ.id);
+      events.push({ message: `La micro-faction de ${civ.name} s'est dissoute d'elle-même.`, type: 'info' });
+      continue;
     }
 
     civ.food = newFood;
