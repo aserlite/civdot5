@@ -11,7 +11,7 @@ export default function GameLoop() {
 
     const intervalId = setInterval(() => {
       runTick();
-    }, 1000 / gameSpeed);
+    }, 500 / gameSpeed);
 
     return () => clearInterval(intervalId);
   }, [isPlaying, gameSpeed, runTick]);

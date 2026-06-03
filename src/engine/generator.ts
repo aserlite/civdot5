@@ -45,9 +45,7 @@ export function generateCells(width: number, height: number, count: number): Cel
         elevation = 0;
         biome = 'OCEAN';
       } else {
-        if (elevation < 0.32) {
-          biome = 'BEACH';
-        } else if (elevation > 0.8) {
+        if (elevation > 0.8) {
           biome = 'MOUNTAIN';
         } else {
           if (moisture > 0.5) {
@@ -76,6 +74,15 @@ export function generateCells(width: number, height: number, count: number): Cel
 
   cells.forEach(c => {
     c.neighbors = Array.from(voronoi.neighbors(c.id)).filter(nId => cellsMap.has(nId));
+  });
+
+  cells.forEach(c => {
+    if (c.biome !== 'OCEAN') {
+      const hasOceanNeighbor = c.neighbors.some(nId => cellsMap.get(nId)?.biome === 'OCEAN');
+      if (hasOceanNeighbor) {
+        c.biome = 'BEACH';
+      }
+    }
   });
 
   return cells;

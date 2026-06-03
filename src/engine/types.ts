@@ -2,11 +2,13 @@ export interface Civilization {
   id: string;
   name: string;
   color: string;
+  hue: number;
   capitalCellId: number;
   population: number;
   food: number;
   wood: number;
   ore: number;
+  lastRevoltTick?: number;
 }
 
 export interface Cell {

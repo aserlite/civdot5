@@ -19,6 +19,8 @@ export default function MapCanvas() {
   const cells = useGameStore(state => state.cells);
   const civs = useGameStore(state => state.civs);
   const initGame = useGameStore(state => state.initGame);
+  const mapMode = useGameStore(state => state.mapMode);
+  const showDebug = useGameStore(state => state.showDebug);
   const hoveredCellId = useGameStore(state => state.hoveredCellId);
   const setHoveredCellId = useGameStore(state => state.setHoveredCellId);
   const setSelectedCellId = useGameStore(state => state.setSelectedCellId);
@@ -52,7 +54,6 @@ export default function MapCanvas() {
 
     ctx.clearRect(0, 0, width, height);
     
-    // Passe 1 : Remplissage
     cells.forEach(cell => {
       if (!cell.polygon || cell.polygon.length === 0) return;
       
@@ -63,22 +64,23 @@ export default function MapCanvas() {
       }
       ctx.closePath();
 
-      const color = BIOME_COLORS[cell.biome] || '#000';
-      ctx.fillStyle = color;
-      ctx.fill();
-      
-      if (cell.civId) {
+      if (mapMode === 'political' && cell.civId) {
         const civ = civs.find(c => c.id === cell.civId);
         if (civ) {
           ctx.fillStyle = civ.color;
-          ctx.globalAlpha = 0.65;
           ctx.fill();
-          ctx.globalAlpha = 1.0;
+        } else {
+          const color = BIOME_COLORS[cell.biome] || '#000';
+          ctx.fillStyle = color;
+          ctx.fill();
         }
+      } else {
+        const color = BIOME_COLORS[cell.biome] || '#000';
+        ctx.fillStyle = color;
+        ctx.fill();
       }
     });
 
-    // Passe 2 : Bordures
     cells.forEach(cell => {
       if (!cell.polygon || cell.polygon.length === 0) return;
       
@@ -94,8 +96,9 @@ export default function MapCanvas() {
         if (civ) {
           ctx.strokeStyle = civ.color;
           ctx.lineWidth = 3;
+          ctx.stroke();
         }
-      } else {
+      } else if (showDebug) {
         const color = BIOME_COLORS[cell.biome] || '#000';
         if (cell.biome === 'OCEAN') {
           ctx.strokeStyle = color;
@@ -103,15 +106,14 @@ export default function MapCanvas() {
           ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
         }
         ctx.lineWidth = 0.8;
+        ctx.stroke();
       }
-      ctx.stroke();
     });
 
-    // Dessiner les capitales de civilisations
     cells.forEach(cell => {
       if (cell.civId) {
         const civ = civs.find(c => c.id === cell.civId);
-        if (civ) {
+        if (civ && civ.capitalCellId === cell.id) {
           ctx.beginPath();
           ctx.arc(cell.x, cell.y, 6, 0, Math.PI * 2);
           ctx.fillStyle = civ.color;
@@ -124,7 +126,7 @@ export default function MapCanvas() {
       }
     });
 
-    if (hoveredCellId !== null) {
+    if (hoveredCellId !== null && showDebug) {
       const cell = cells.find(c => c.id === hoveredCellId);
       if (cell && cell.polygon && cell.polygon.length > 0) {
         ctx.beginPath();
@@ -142,7 +144,7 @@ export default function MapCanvas() {
         ctx.stroke();
       }
     }
-  }, [cells, hoveredCellId, civs]);
+  }, [cells, hoveredCellId, civs, mapMode, showDebug]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!delaunayRef.current) return;
