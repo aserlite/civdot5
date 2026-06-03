@@ -18,7 +18,6 @@ export default function MapCanvas() {
   
   const cells = useGameStore(state => state.cells);
   const civs = useGameStore(state => state.civs);
-  const setCells = useGameStore(state => state.setCells);
   const initGame = useGameStore(state => state.initGame);
   const hoveredCellId = useGameStore(state => state.hoveredCellId);
   const setHoveredCellId = useGameStore(state => state.setHoveredCellId);

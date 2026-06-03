@@ -99,7 +99,7 @@ export function simulateTick(cells: Cell[], civs: Civilization[]): { updatedCell
     let newFood = civ.food + netFood;
     let newPop = civ.population;
     let newWood = civ.wood + woodGain;
-    let newOre = civ.ore + oreGain;
+    const newOre = civ.ore + oreGain;
 
     if (newFood > 0) {
       newPop += Math.ceil(newPop * GAME_CONFIG.GROWTH_RATE);

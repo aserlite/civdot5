@@ -26,9 +26,9 @@ export function generateCells(width: number, height: number, count: number): Cel
     const dy = Math.abs(y - cy) / cy;
     const baseD = Math.max(dx, dy);
 
-    let elevation = 0;
+    let elevation: number;
     let moisture = 0;
-    let biome = '';
+    let biome: string;
 
     const limit = 0.96;
     if (baseD > limit) {
